@@ -1,0 +1,31 @@
+# Local dev stack: backend + frontend + two demo Chroma servers to migrate between.
+services:
+  chroma-a:
+    image: chromadb/chroma:latest
+    ports: ["8001:8000"]
+    volumes: ["chroma_a:/data"]
+
+  chroma-b:
+    image: chromadb/chroma:latest
+    ports: ["8002:8000"]
+    volumes: ["chroma_b:/data"]
+
+  backend:
+    build: ./backend
+    ports: ["8080:8080"]
+    environment:
+      CUI_DATA_DIR: /state
+    volumes: ["cui_state:/state"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080
+
+  frontend:
+    build: ./frontend
+    ports: ["5173:5173"]
+    environment:
+      VITE_API: http://localhost:8080
+    depends_on: [backend]
+
+volumes:
+  chroma_a:
+  chroma_b:
+  cui_state:
