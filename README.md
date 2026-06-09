@@ -51,6 +51,7 @@ cd chroma_ultimate_ui
 
 ### 2. รัน (ครั้งแรก)
 
+**macOS / Linux:**
 ```bash
 make dev
 ```
@@ -81,6 +82,43 @@ make dev
 ```
 
 ใช้คำสั่งเดิม — ถ้า venv และ node_modules มีอยู่แล้วจะข้ามขั้นตอนติดตั้งและรันทันที
+
+---
+
+### Windows
+
+Windows ไม่มี `make` built-in — มี 3 วิธี:
+
+**วิธี 1 — ติดตั้ง make (แนะนำ)**
+
+```powershell
+winget install GnuWin32.Make
+```
+
+รีสตาร์ท terminal แล้วใช้ `make dev` ได้เลย
+
+**วิธี 2 — ใช้ Git Bash**
+
+ถ้าติดตั้ง [Git for Windows](https://git-scm.com/download/win) อยู่แล้ว เปิด **Git Bash** แทน PowerShell → `make dev` ใช้ได้เลย
+
+**วิธี 3 — รันตรงโดยไม่ใช้ make**
+
+เปิด 2 terminal แยกกัน:
+
+Terminal 1 — Backend:
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\pip install -e .
+.venv\Scripts\uvicorn app.main:app --reload --port 8080
+```
+
+Terminal 2 — Frontend:
+```powershell
+cd frontend
+npm install
+npm run dev
+```
 
 ---
 
