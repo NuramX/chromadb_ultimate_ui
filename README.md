@@ -12,7 +12,7 @@ DBeaver-style web GUI for [ChromaDB](https://www.trychroma.com/) — browse coll
 | **Browse records** | Double-click any collection to page through its records (id / document / metadata / embedding) |
 | **Record detail** | Click a row to open a full-detail modal including the complete embedding vector |
 | **Delete records** | Checkbox multi-select across pages → bulk delete; or delete from the detail modal |
-| **Metadata filter** | Visual filter builder — pick fields from a sampled dropdown or type field names manually; supports `=`, `≠`, `>`, `≥`, `<`, `≤`, `in`, `not in` per field type |
+| **Metadata filter** | Filter by any metadata field; type the field name and pick its type manually |
 | **Dump / copy** | Copy a collection from one ChromaDB server to another with resume-safe checkpointing |
 | **Filtered dump** | Apply a metadata filter first, then dump only the matching records |
 | **Batch queue** | All dump jobs run sequentially (one at a time) so a weak source server is never overloaded |
@@ -22,82 +22,187 @@ DBeaver-style web GUI for [ChromaDB](https://www.trychroma.com/) — browse coll
 
 ---
 
-## Quick start
+## Requirements
 
-### Option A — one command (recommended)
+| Requirement | Version |
+|---|---|
+| Python | 3.10 or later |
+| Node.js | 18 or later |
+| npm | 9 or later |
+
+ตรวจ version ที่มีอยู่:
+
+```bash
+python3 --version
+node --version
+npm --version
+```
+
+---
+
+## Installation & Setup
+
+### 1. Clone the repository
+
+```bash
+git clone <repo-url>
+cd chroma_ultimate_ui
+```
+
+### 2. รัน (ครั้งแรก)
 
 ```bash
 make dev
 ```
 
-First run auto-creates a Python venv and installs npm deps. Ctrl+C stops both servers.
+`make dev` จะ:
+- สร้าง Python virtual environment ใน `backend/.venv` อัตโนมัติ
+- ติดตั้ง Python dependencies
+- ติดตั้ง Node.js dependencies (`npm install`)
+- รัน backend (port 8080) และ frontend (port 5173) พร้อมกัน
 
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| Backend API | http://localhost:8080 |
-| API docs | http://localhost:8080/docs |
+รอจนเห็น output แบบนี้:
 
-### Option B — run separately
+```
+→ setting up backend venv
+→ installing frontend deps
+INFO:     Uvicorn running on http://0.0.0.0:8080
+VITE v5.x.x  ready in ...ms  ➜  Local: http://localhost:5173/
+```
+
+แล้วเปิด **http://localhost:5173** ในเบราว์เซอร์
+
+กด **Ctrl+C** เพื่อหยุดทั้งสองตัวพร้อมกัน
+
+### 3. ครั้งต่อไป
 
 ```bash
-# Terminal 1 — backend
-make backend
+make dev
+```
 
-# Terminal 2 — frontend
+ใช้คำสั่งเดิม — ถ้า venv และ node_modules มีอยู่แล้วจะข้ามขั้นตอนติดตั้งและรันทันที
+
+---
+
+## การใช้งาน
+
+### เพิ่ม Connection
+
+1. กดปุ่ม **+** ที่ toolbar ด้านบนซ้าย
+2. กรอกข้อมูล:
+   - **Name** — ชื่อสำหรับจำ เช่น `Production`, `Dev`
+   - **Host** — IP หรือ hostname ของ ChromaDB server เช่น `10.100.3.91`
+   - **Port** — port ที่ ChromaDB ฟังอยู่ เช่น `8001`
+   - **Token** — Bearer token (ถ้า server ต้องการ auth) — ถ้าไม่มีให้เว้นว่าง
+3. กด **Save**
+
+### เชื่อมต่อและดูข้อมูล
+
+1. คลิกที่ connection row → ระบบโหลด collection list
+2. กด **▶** หน้า **Collections** เพื่อขยาย
+3. **Double-click** ที่ collection → เปิดดูข้อมูลในหน้าขวา
+4. คลิกที่แถวข้อมูล → เปิด detail modal (ดู embedding เต็ม, metadata, document)
+
+### Right-click menu
+
+- **คลิกขวาที่ connection** → Disconnect / Refresh / New collection / Copy collections / Rename / Delete
+- **คลิกขวาที่ collection** → Open / Rename / Delete
+- **Cmd+click หรือ Shift+click** → เลือกหลาย collection พร้อมกัน (สำหรับ bulk delete)
+
+### Filter ข้อมูล
+
+1. เปิด collection → กดปุ่ม **+ condition** ในแถบ Filter
+2. พิมพ์ **field name** → เลือก **type** (str / int / float / bool) → เลือก **operator** → ใส่ **value**
+3. กด **Apply** → ตารางแสดงเฉพาะแถวที่ตรงเงื่อนไข
+4. เงื่อนไขหลายอัน → รวมด้วย AND อัตโนมัติ
+
+Operator ที่รองรับ:
+
+| Type | Operators |
+|---|---|
+| str | `=` `≠` `in` `not in` |
+| int | `=` `≠` `>` `≥` `<` `≤` `in` `not in` |
+| float | `=` `≠` `>` `≥` `<` `≤` |
+| bool | `=` `≠` |
+
+### Dump (copy) Collection
+
+1. **คลิกขวาที่ connection** → **Copy collections…** (หรือกด Copy บน folder)
+2. เลือก source collection(s)
+3. เลือก target connection และตั้งชื่อ collection ปลายทาง
+4. กด **Start** → job เข้าคิวและรันทันที
+
+หรือ dump เฉพาะข้อมูลที่ filter แล้ว:
+1. เปิด collection → ตั้ง filter → กด **Dump filtered…**
+2. เลือก target → กด Start
+
+ดู progress ได้ที่ปุ่ม **⏱** (clock icon) toolbar ด้านบน
+
+### Delete Records
+
+- **ตาราง** → tick checkbox หน้าแถว → กด **Delete N records** (เลือกข้ามหน้าได้)
+- **Detail modal** → กดปุ่ม **Delete** มุมขวาบน
+
+---
+
+## Production dumps (ไม่ auto-reload)
+
+`make dev` ใช้ `--reload` — ถ้าแก้โค้ดระหว่าง dump backend จะ restart และ interrupt job
+
+สำหรับ dump จริงที่ใช้เวลานาน:
+
+```bash
+# Terminal 1
+make serve      # backend ไม่มี --reload
+
+# Terminal 2
 make frontend
 ```
 
-### Option C — Docker Compose (backend + frontend + 2 demo Chroma servers)
-
-```bash
-docker compose up
-```
-
-Spins up `chroma-a` (port 8001) and `chroma-b` (port 8002) so you can test dumps between them right away.
+Dump resume-safe — ถ้า backend restart ระหว่างทาง กด **Resume** ใน jobs panel เพื่อดึงต่อจาก checkpoint ล่าสุด
 
 ---
 
 ## Configuration
 
-All settings are environment variables — no config file needed.
+ปรับผ่าน environment variable — ไม่ต้องแก้ไฟล์
 
 | Variable | Default | Description |
 |---|---|---|
-| `CUI_BATCH` | `100` | Records fetched/written per batch during a dump |
-| `CUI_MAX_CONCURRENT_JOBS` | `1` | Max parallel dump jobs (keep at 1 for weak servers) |
-| `CUI_DATA_DIR` | `~/.chroma_ultimate_ui` | Where SQLite DB and encryption key are stored |
+| `CUI_BATCH` | `50` | จำนวน record ต่อ batch ระหว่าง dump |
+| `CUI_MAX_CONCURRENT_JOBS` | `1` | จำนวน dump job ที่รันพร้อมกัน (แนะนำ 1 สำหรับ server ที่ไม่แรง) |
+| `CUI_DATA_DIR` | `~/.chroma_ultimate_ui` | ที่เก็บ SQLite database และ encryption key |
 
-Example — larger batches for a fast server:
-
-```bash
-CUI_BATCH=500 make dev
-```
-
----
-
-## Production dumps (no auto-reload)
-
-`make dev` uses `--reload` which restarts the backend on every file save. A restart mid-dump kills the in-memory worker thread. Use `make serve` for long-running dumps:
+ตัวอย่าง:
 
 ```bash
-make serve      # backend only, no --reload
-make frontend   # frontend in a second terminal
+CUI_BATCH=200 make serve
 ```
-
-Dumps are resume-safe: each batch is checkpointed in SQLite, so if the server does restart you can hit **Resume** in the jobs panel and it picks up from the last checkpoint.
 
 ---
 
 ## How dumps work
 
-1. Source collection is read in pages of `CUI_BATCH` records (`get(limit, offset)` — never loads everything into memory).
-2. Each page is written to the target with `upsert` (idempotent — safe to re-run).
-3. Progress and checkpoint offset are saved to SQLite after every batch.
-4. Jobs are queued in a FIFO queue and run one at a time (single worker thread).
-5. On startup, any `pending` or `running` jobs from a previous session are automatically re-queued.
+1. ดึง ID ทั้งหมดจาก source collection 1 ครั้ง (ไม่โหลด embedding — เร็วมาก)
+2. แบ่ง IDs เป็น slice ขนาด `CUI_BATCH` → `get(ids=slice)` ทีละชุด
+3. แต่ละ batch เขียนลง target ด้วย `upsert` (idempotent — รันซ้ำได้ปลอดภัย)
+4. บันทึก progress + checkpoint ลง SQLite หลังทุก batch
+5. Jobs รันทีละ 1 งาน (FIFO queue) — server ต้นทางไม่ถูก hit พร้อมกัน
+6. เมื่อ backend restart → jobs ที่ค้างอยู่ถูก re-enqueue อัตโนมัติ
 
-For a **filtered dump**, matching record IDs are resolved upfront via `get(where=..., include=[])`, then pages are fetched by ID slice — so the filter is applied once, not per batch.
+---
+
+## Data storage
+
+ข้อมูลทั้งหมดเก็บใน `~/.chroma_ultimate_ui/`:
+
+```
+~/.chroma_ultimate_ui/
+├── store.db      # SQLite — saved connections + job history
+└── secret.key    # Fernet encryption key (สร้างครั้งแรกอัตโนมัติ)
+```
+
+Auth token ของ connection ถูก encrypt ด้วย Fernet ก่อนเก็บใน `store.db` — ไม่มีการส่ง token กลับมาที่ frontend
 
 ---
 
@@ -121,7 +226,7 @@ chroma_ultimate_ui/
 ├── frontend/
 │   └── src/
 │       ├── App.tsx             # Main layout, sidebar tree, record table
-│       ├── FilterBar.tsx       # Metadata filter builder (auto + manual mode)
+│       ├── FilterBar.tsx       # Metadata filter builder
 │       ├── FilteredDumpDialog.tsx
 │       ├── JobsPanel.tsx       # Live job list with progress bars
 │       ├── MigratePanel.tsx    # Dump dialog
@@ -130,27 +235,6 @@ chroma_ultimate_ui/
 ├── docker-compose.yml
 └── Makefile
 ```
-
----
-
-## Connecting to a ChromaDB server
-
-1. Click **+** in the top-left toolbar → fill in host, port, and optional bearer token.
-2. Click the connection row to connect and load its collections.
-3. Right-click the connection for: Disconnect / Refresh / New collection / Copy collections / Rename / Delete.
-
-Auth tokens are encrypted with Fernet before being stored in the local SQLite database and are never returned to the frontend.
-
----
-
-## Metadata filter
-
-The filter bar appears above the record table after opening a collection.
-
-- **Auto mode** — field names and types are discovered by sampling up to 500 records. Pick a field from the dropdown.
-- **Manual mode** (checkbox) — type the exact field name and pick its type (`str` / `int` / `float` / `bool`). Use this when the 500-row sample might miss rare fields.
-
-Multiple conditions are combined with `$and`. Clicking **Dump filtered…** starts a dump job that copies only the matched records.
 
 ---
 
