@@ -1,7 +1,8 @@
 """Batched, resumable collection copy between two Chroma servers.
 
 Designed for >1M vectors:
-  - never loads the whole collection; pages with get(limit, offset)
+  - fetches all IDs upfront once (include=[] → no blobs, cheap),
+    then pages by explicit ID slice → avoids O(N) SQLite offset scan
   - upsert into target → idempotent → safe to resume from a checkpoint
   - progress + checkpoint persisted to SQLite after every batch, so the job
     survives a backend restart (resume via POST /jobs/{id}/resume)
@@ -169,13 +170,16 @@ def _run(job_id: int, cancel: threading.Event) -> None:
         offset = job["checkpoint_offset"]  # resume point
         batch = job["batch_size"]
 
+        # IDs-first strategy for both regular and filtered dumps:
+        # fetch the full ID list once (include=[] → no blobs, very cheap),
+        # then page by explicit ID slice.  This avoids SQLite's O(N) offset
+        # scan which degrades badly at high offsets on large collections.
         if where:
-            # Filtered dump: resolve matching ids up front for total + paging.
-            match_ids = sorted(source.get(where=where, include=[])["ids"])
-            total = len(match_ids)
+            all_ids = sorted(source.get(where=where, include=[])["ids"])
         else:
-            match_ids = None
-            total = source.count()
+            all_ids = sorted(source.get(include=[])["ids"])
+
+        total = len(all_ids)
         _set(job_id, state="running", total=total)
 
         while offset < total:
@@ -183,11 +187,8 @@ def _run(job_id: int, cancel: threading.Event) -> None:
                 _set(job_id, state="paused")
                 return
 
-            if where:
-                slice_ids = match_ids[offset:offset + batch]
-                page = source.get(ids=slice_ids, include=_INCLUDE)
-            else:
-                page = source.get(limit=batch, offset=offset, include=_INCLUDE)
+            slice_ids = all_ids[offset:offset + batch]
+            page = source.get(ids=slice_ids, include=_INCLUDE)
             ids = page["ids"]
             if not ids:
                 break

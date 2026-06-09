@@ -16,7 +16,7 @@ KEY_PATH = DATA_DIR / "secret.key"
 # Migration batch size (rows fetched/written per page).
 # Default 50 — the source server is weak, so keep pages small.
 # Bump this (env CUI_BATCH or edit here) when the server can take more.
-DEFAULT_BATCH = int(os.environ.get("CUI_BATCH", "100"))
+DEFAULT_BATCH = int(os.environ.get("CUI_BATCH", "50"))
 
 # Dump runs strictly sequentially: one job (one collection) at a time, so the
 # weak host is never hit by parallel copies. This is a hard cap, not a default.
