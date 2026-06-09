@@ -101,24 +101,17 @@ winget install GnuWin32.Make
 
 ถ้าติดตั้ง [Git for Windows](https://git-scm.com/download/win) อยู่แล้ว เปิด **Git Bash** แทน PowerShell → `make dev` ใช้ได้เลย
 
-**วิธี 3 — รันตรงโดยไม่ใช้ make**
+**วิธี 3 — ใช้ dev.bat (ไม่ต้องติดตั้งอะไรเพิ่ม)**
 
-เปิด 2 terminal แยกกัน:
+ดับเบิลคลิกไฟล์ `dev.bat` ในโฟลเดอร์โปรเจกต์
+หรือรันใน CMD / PowerShell:
 
-Terminal 1 — Backend:
 ```powershell
-cd backend
-python -m venv .venv
-.venv\Scripts\pip install -e .
-.venv\Scripts\uvicorn app.main:app --reload --port 8080
+dev.bat
 ```
 
-Terminal 2 — Frontend:
-```powershell
-cd frontend
-npm install
-npm run dev
-```
+จะเปิด 2 หน้าต่างอัตโนมัติ (backend + frontend) พร้อมติดตั้ง dependencies ให้ในครั้งแรก
+ปิดทั้งสองหน้าต่างเพื่อหยุด
 
 ---
 
