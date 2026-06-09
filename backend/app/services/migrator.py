@@ -182,28 +182,109 @@ def _run(job_id: int, cancel: threading.Event) -> None:
         total = len(all_ids)
         _set(job_id, state="running", total=total)
 
-        while offset < total:
-            if cancel.is_set():
-                _set(job_id, state="paused")
-                return
+        if offset >= total:
+            _set(job_id, state="done", processed=total, checkpoint_offset=total)
+            return
 
-            slice_ids = all_ids[offset:offset + batch]
-            page = source.get(ids=slice_ids, include=_INCLUDE)
-            ids = page["ids"]
-            if not ids:
-                break
-
-            target.upsert(
-                ids=ids,
-                embeddings=page.get("embeddings"),
-                documents=page.get("documents"),
-                metadatas=page.get("metadatas"),
-            )
-
-            offset += len(ids)
-            # Checkpoint after every batch — restart-safe.
-            _set(job_id, processed=offset, checkpoint_offset=offset)
-
-        _set(job_id, state="done", processed=offset, checkpoint_offset=offset)
+        _pipeline_copy(job_id, source, target, all_ids, offset, batch, cancel)
     except Exception as e:  # noqa: BLE001 — surface any failure to the UI
         _set(job_id, state="error", error=str(e))
+
+
+# Sentinel pushed onto the queue to tell the writer the reader is finished.
+_DONE = object()
+
+
+def _pipeline_copy(job_id, source, target, all_ids, offset, batch,
+                   cancel: threading.Event) -> None:
+    """Copy all_ids[offset:] from source to target with a 2-thread pipeline.
+
+    Reader thread: fetch one CUI_BATCH slice from the source at a time and hand
+    it to a bounded queue (maxsize=2 → at most one batch prefetched, so the weak
+    source is never hit by more than one in-flight request).
+    Writer (this thread): drain the queue, accumulate WRITE_BATCH_FACTOR batches,
+    and upsert them to the (strong) target in one call — fewer round-trips.
+
+    Checkpoint advances only after a successful target write, so a crash/pause
+    resumes from the last fully-written offset (upsert is idempotent anyway)."""
+    total = len(all_ids)
+    q: "queue.Queue" = queue.Queue(maxsize=2)
+    stop = threading.Event()   # writer signals reader to bail on error
+    errbox: dict[str, BaseException] = {}
+
+    def reader() -> None:
+        try:
+            off = offset
+            while off < total and not cancel.is_set() and not stop.is_set():
+                slice_ids = all_ids[off:off + batch]
+                page = source.get(ids=slice_ids, include=_INCLUDE)
+                n = len(page["ids"])
+                if n == 0:
+                    break
+                q.put((page, n))  # blocks here when queue is full → throttles source
+                off += n
+        except BaseException as e:  # noqa: BLE001 — relay to writer/main
+            errbox["reader"] = e
+        finally:
+            q.put(_DONE)
+
+    reader_t = threading.Thread(target=reader, name=f"dump-reader-{job_id}",
+                                daemon=True)
+    reader_t.start()
+
+    written = offset
+    acc: dict[str, list] = {"ids": [], "embeddings": [], "documents": [], "metadatas": []}
+    flush_every = batch * config.WRITE_BATCH_FACTOR
+
+    def flush() -> None:
+        nonlocal written
+        if not acc["ids"]:
+            return
+        kw = {"ids": acc["ids"]}
+        # Only pass a field if it carries real data — a collection without
+        # embeddings/documents must not get a list of Nones (upsert rejects it).
+        for f in ("embeddings", "documents", "metadatas"):
+            if any(v is not None for v in acc[f]):
+                kw[f] = acc[f]
+        target.upsert(**kw)
+        written += len(acc["ids"])
+        _set(job_id, processed=written, checkpoint_offset=written)
+        for f in acc:
+            acc[f] = []
+
+    try:
+        while True:
+            item = q.get()
+            if item is _DONE:
+                break
+            page, n = item
+            acc["ids"].extend(page["ids"])
+            for f in ("embeddings", "documents", "metadatas"):
+                v = page.get(f)
+                acc[f].extend(list(v) if v is not None else [None] * n)
+            if len(acc["ids"]) >= flush_every:
+                flush()
+        flush()  # write whatever is left below the batch-factor threshold
+    except BaseException:
+        stop.set()           # tell reader to quit
+        _drain(q)            # unblock a reader parked on a full queue
+        raise
+    finally:
+        reader_t.join(timeout=5)
+
+    if errbox:
+        raise errbox["reader"]
+
+    if cancel.is_set() and written < total:
+        _set(job_id, state="paused")
+    else:
+        _set(job_id, state="done", processed=written, checkpoint_offset=written)
+
+
+def _drain(q: "queue.Queue") -> None:
+    """Empty a queue without blocking — frees a producer stuck on a full put()."""
+    try:
+        while True:
+            q.get_nowait()
+    except queue.Empty:
+        pass
