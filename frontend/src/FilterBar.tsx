@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
-import type { FieldInfo, Where } from "./api";
+import { useState } from "react";
+import type { Where } from "./api";
 
-type FType = FieldInfo["type"];
+type FType = "str" | "int" | "float" | "bool";
 
-// Operators offered per field type.
 const OPS: Record<FType, { op: string; label: string }[]> = {
   str: [
     { op: "$eq", label: "=" }, { op: "$ne", label: "≠" },
@@ -27,7 +26,6 @@ const TYPES: FType[] = ["str", "int", "float", "bool"];
 
 interface Cond { field: string; type: FType; op: string; value: string; }
 
-// Coerce a text value to the field's JSON type. $in/$nin -> array (comma-split).
 function coerce(type: FType, op: string, raw: string): unknown {
   const one = (s: string): unknown => {
     s = s.trim();
@@ -47,25 +45,12 @@ function buildWhere(conds: Cond[]): Where | null {
   return clauses.length === 1 ? clauses[0] : { $and: clauses };
 }
 
-export function FilterBar({ fields, onApply, onDumpFiltered, active }:
-  { fields: FieldInfo[]; onApply: (w: Where | null) => void;
+export function FilterBar({ onApply, onDumpFiltered, active }:
+  { onApply: (w: Where | null) => void;
     onDumpFiltered: (w: Where) => void; active: boolean }) {
-  // Manual mode: type field name by hand (avoids missing fields the 500-row
-  // sample never saw). Auto-on when sampling found no fields.
-  const [manual, setManual] = useState(false);
   const [conds, setConds] = useState<Cond[]>([]);
 
-  useEffect(() => { setConds([]); setManual(fields.length === 0); }, [fields]);
-
-  const opsForType = (t: FType) => OPS[t];
-  const typeOf = (field: string): FType => fields.find(f => f.name === field)?.type ?? "str";
-
-  const addRow = () => setConds(c => {
-    if (manual) return [...c, { field: "", type: "str" as FType, op: OPS.str[0].op, value: "" }];
-    const f = fields[0];
-    const t = f?.type ?? "str";
-    return [...c, { field: f?.name ?? "", type: t, op: OPS[t][0].op, value: "" }];
-  });
+  const addRow = () => setConds(c => [...c, { field: "", type: "str", op: OPS.str[0].op, value: "" }]);
   const setRow = (i: number, patch: Partial<Cond>) =>
     setConds(c => c.map((r, j) => j === i ? { ...r, ...patch } : r));
   const delRow = (i: number) => setConds(c => c.filter((_, j) => j !== i));
@@ -78,39 +63,19 @@ export function FilterBar({ fields, onApply, onDumpFiltered, active }:
         <strong style={{ flex: 1, fontSize: 12 }}>
           Filter (metadata) {active && <span style={{ color: "#4fc3f7" }}>● active</span>}
         </strong>
-        <label className="muted" style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 4, width: "auto" }}>
-          <input type="checkbox" style={{ width: "auto" }}
-            checked={manual} onChange={e => setManual(e.target.checked)} />
-          manual field
-        </label>
         <button className="ghost" onClick={addRow}>+ condition</button>
       </div>
 
-      {manual && (
-        <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
-          Type the exact field name + pick its type. Sampling is skipped.
-        </div>
-      )}
-
       {conds.map((c, i) => (
         <div key={i} className="row" style={{ margin: "0 0 6px" }}>
-          {manual ? (
-            <>
-              <input style={{ flex: 2 }} value={c.field} placeholder="field name"
-                onChange={e => setRow(i, { field: e.target.value })} />
-              <select style={{ flex: 1 }} value={c.type}
-                onChange={e => { const t = e.target.value as FType; setRow(i, { type: t, op: OPS[t][0].op }); }}>
-                {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </>
-          ) : (
-            <select style={{ flex: 3 }} value={c.field}
-              onChange={e => { const t = typeOf(e.target.value); setRow(i, { field: e.target.value, type: t, op: OPS[t][0].op }); }}>
-              {fields.map(f => <option key={f.name} value={f.name}>{f.name} ({f.type})</option>)}
-            </select>
-          )}
+          <input style={{ flex: 2 }} value={c.field} placeholder="field name"
+            onChange={e => setRow(i, { field: e.target.value })} />
+          <select style={{ flex: 1 }} value={c.type}
+            onChange={e => { const t = e.target.value as FType; setRow(i, { type: t, op: OPS[t][0].op }); }}>
+            {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
           <select style={{ flex: 1 }} value={c.op} onChange={e => setRow(i, { op: e.target.value })}>
-            {opsForType(c.type).map(o => <option key={o.op} value={o.op}>{o.label}</option>)}
+            {OPS[c.type].map(o => <option key={o.op} value={o.op}>{o.label}</option>)}
           </select>
           <input style={{ flex: 2 }} value={c.value}
             placeholder={c.op === "$in" || c.op === "$nin" ? "a, b, c" : "value"}

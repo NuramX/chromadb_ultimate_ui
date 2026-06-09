@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Connection, type CollectionInfo, type RecordsPage, type JobStatus, type FieldInfo, type Where } from "./api";
+import { api, type Connection, type CollectionInfo, type RecordsPage, type JobStatus, type Where } from "./api";
 import { ConnectionForm } from "./ConnectionForm";
 import { MigratePanel } from "./MigratePanel";
 import { JobsPanel } from "./JobsPanel";
@@ -180,7 +180,6 @@ export function App() {
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
 
   const [opened, setOpened] = useState<CollRef | null>(null);   // record view target
-  const [fields, setFields] = useState<FieldInfo[]>([]);        // metadata fields of opened
   const [appliedWhere, setAppliedWhere] = useState<Where | null>(null);
   const [filteredDump, setFilteredDump] = useState<{ connId: number; collection: string; where: Where } | null>(null);
   // Multi-select for bulk actions, scoped to a single connection at a time.
@@ -328,9 +327,7 @@ export function App() {
     setOpened({ connId, name });
     setSelConnId(connId); setSelNames(new Set([name])); setSelAnchor(name);
     setAppliedWhere(null);
-    setFields([]);
     setSelRows(new Set());  // clear record row selection when switching collection
-    api.getFields(connId, name).then(setFields).catch(() => setFields([]));
     fetchPage(connId, name, 0, null);
   }
 
@@ -632,7 +629,6 @@ export function App() {
         {opened && (
           <>
             <FilterBar
-              fields={fields}
               active={!!appliedWhere}
               onApply={applyFilter}
               onDumpFiltered={(w) => setFilteredDump({ connId: opened.connId, collection: opened.name, where: w })}
