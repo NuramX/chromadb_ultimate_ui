@@ -143,7 +143,12 @@ def _worker_loop() -> None:
             _QUEUE.task_done()
 
 
+_ALLOWED_JOB_COLS = frozenset({"state", "error", "processed", "total", "checkpoint_offset"})
+
 def _set(job_id: int, **fields) -> None:
+    unknown = set(fields) - _ALLOWED_JOB_COLS
+    if unknown:
+        raise ValueError(f"disallowed job columns: {unknown}")
     cols = ", ".join(f"{k} = ?" for k in fields)
     with connect() as c:
         c.execute(f"UPDATE jobs SET {cols} WHERE id = ?", (*fields.values(), job_id))

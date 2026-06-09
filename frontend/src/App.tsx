@@ -216,7 +216,10 @@ export function App() {
   const [expandedConns, setExpandedConns] = useState<Record<number, boolean>>({});
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
 
-  const refresh = () => api.listConnections().then(setConns).catch(e => setErr(e.message));
+  const refresh = () => api.listConnections().then(conns => {
+    setConns(conns);
+    conns.filter(c => connectedIds.has(c.id)).forEach(c => connectConn(c));
+  }).catch(e => setErr(e.message));
   useEffect(() => { refresh(); }, []);
 
   // Poll jobs: fast (1s) when a job is active or the panel is open, slow (5s)

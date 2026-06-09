@@ -19,8 +19,8 @@ _cors_origins = [o.strip() for o in os.environ.get("CUI_CORS_ORIGINS", _default_
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 app.include_router(connections.router)

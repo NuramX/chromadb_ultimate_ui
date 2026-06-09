@@ -277,6 +277,19 @@ chroma_ultimate_ui/
 
 ---
 
+## Security
+
+| What | How |
+|---|---|
+| Auth tokens | Encrypted with Fernet before storing in SQLite — never sent back to frontend |
+| Encryption key | Stored at `~/.chroma_ultimate_ui/secret.key` with `chmod 600` (owner read-only) |
+| CORS | Restricted to `localhost:5173` by default — override with `CUI_CORS_ORIGINS` |
+| SQL | All queries use parameterized statements — no string concatenation with user input |
+
+> This tool is designed for **local or trusted-network use**. The backend API has no authentication — do not expose port 8080 to the public internet.
+
+---
+
 ## Tech stack
 
 | Layer | Technology |
