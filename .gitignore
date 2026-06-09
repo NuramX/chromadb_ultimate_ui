@@ -1,13 +1,32 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
 .venv/
 *.egg-info/
+build/
 
 # Node
 node_modules/
 dist/
 *.tsbuildinfo
 
-# Local state (saved connections, encryption key, job db)
+# Env files — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# Local app state (saved connections, encryption key, job db)
 .chroma_ultimate_ui/
+*.key
+store.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
