@@ -44,28 +44,30 @@ export function JobsPanel({ jobs, conns, onClose, onChanged }:
 
         {jobs.map(j => {
           const pct = j.state === "done" ? 100 : j.total ? Math.round((j.processed / j.total) * 100) : 0;
+          const collLabel = j.source_collection + (j.target_collection !== j.source_collection ? ` → ${j.target_collection}` : "");
           return (
-            <div key={j.id} style={{ borderBottom: "1px solid #333", paddingBottom: 8 }}>
-              <div className="row" style={{ margin: 0 }}>
-                <span style={{ flex: 1 }}>
-                  <span className="muted">#{j.id}</span>{" "}
-                  {j.source_collection} <span className="muted">@ {dbName(j.source_conn_id)}</span>
-                  {" → "}
-                  {j.target_collection} <span className="muted">@ {dbName(j.target_conn_id)}</span>
-                </span>
-                <span style={{ color: STATE_COLOR[j.state], fontWeight: 500 }}>{j.state}</span>
-                <span className="muted">{j.processed}/{j.total} ({pct}%)</span>
+            <div key={j.id} style={{ background: "#1e1e1e", borderRadius: 6, padding: "8px 10px", display: "grid", gap: 6 }}>
+              <div className="row" style={{ margin: 0, alignItems: "center" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span className="muted" style={{ fontWeight: 400, fontSize: 11 }}>#{j.id} </span>
+                    {collLabel}
+                  </div>
+                  <div className="muted" style={{ fontSize: 11 }}>{dbName(j.source_conn_id)} → {dbName(j.target_conn_id)}</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span className="muted" style={{ fontSize: 12 }}>{j.processed.toLocaleString()}/{(j.total || 0).toLocaleString()}</span>
+                  <span style={{ color: STATE_COLOR[j.state], fontWeight: 500, fontSize: 12 }}>{j.state}</span>
+                  {j.state === "running" &&
+                    <button className="ghost" onClick={() => act(() => api.pauseJob(j.id))}>Pause</button>}
+                  {(j.state === "paused" || j.state === "error") &&
+                    <button className="ghost" onClick={() => act(() => api.resumeJob(j.id))}>Resume</button>}
+                  {(j.state !== "running" && j.state !== "pending") &&
+                    <button className="ghost" onClick={() => act(() => api.deleteJob(j.id))}>Delete</button>}
+                </div>
               </div>
               <div className="bar"><div style={{ width: pct + "%" }} /></div>
               {j.error && <div style={{ color: "#f48771", fontSize: 12 }}>{j.error}</div>}
-              <div className="row" style={{ margin: "4px 0 0", justifyContent: "flex-end" }}>
-                {j.state === "running" &&
-                  <button className="ghost" onClick={() => act(() => api.pauseJob(j.id))}>Pause</button>}
-                {(j.state === "paused" || j.state === "error") &&
-                  <button className="ghost" onClick={() => act(() => api.resumeJob(j.id))}>Resume</button>}
-                {(j.state !== "running" && j.state !== "pending") &&
-                  <button className="ghost" onClick={() => act(() => api.deleteJob(j.id))}>Delete</button>}
-              </div>
             </div>
           );
         })}

@@ -101,15 +101,25 @@ export function MigratePanel({ conns, source, collections, onClose }:
             <strong>Queue ({jobs.filter(j => j.state === "done").length}/{jobs.length} done)</strong>
             {jobs.map(j => {
               const pct = j.state === "done" ? 100 : j.total ? Math.round((j.processed / j.total) * 100) : 0;
+              const srcName = conns.find(c => c.id === j.source_conn_id)?.name ?? `#${j.source_conn_id}`;
+              const tgtName = conns.find(c => c.id === j.target_conn_id)?.name ?? `#${j.target_conn_id}`;
+              const collLabel = j.source_collection + (j.target_collection !== j.source_collection ? ` → ${j.target_collection}` : "");
               return (
-                <div key={j.id}>
-                  <div className="row" style={{ margin: 0 }}>
-                    <span style={{ flex: 1 }}>{j.source_collection}</span>
-                    <span className="muted">{j.state} · {j.processed}/{j.total}</span>
-                    {(j.state === "paused" || j.state === "error") &&
-                      <button className="ghost" onClick={() => api.resumeJob(j.id)}>resume</button>}
-                    {j.state === "running" &&
-                      <button className="ghost" onClick={() => api.pauseJob(j.id)}>pause</button>}
+                <div key={j.id} style={{ background: "#1e1e1e", borderRadius: 6, padding: "8px 10px", display: "grid", gap: 6 }}>
+                  <div className="row" style={{ margin: 0, alignItems: "center" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{collLabel}</div>
+                      <div className="muted" style={{ fontSize: 11 }}>{srcName} → {tgtName}</div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      <span className="muted" style={{ fontSize: 12 }}>{j.processed.toLocaleString()}/{(j.total || 0).toLocaleString()}</span>
+                      {j.state === "done" &&
+                        <span style={{ color: "#4ec9b0", fontSize: 12 }}>✓ done</span>}
+                      {j.state === "pending" &&
+                        <span className="muted" style={{ fontSize: 12 }}>pending</span>}
+                      {j.state === "error" &&
+                        <span style={{ color: "#f48771", fontSize: 12 }}>error</span>}
+                    </div>
                   </div>
                   <div className="bar"><div style={{ width: pct + "%" }} /></div>
                   {j.error && <div style={{ color: "#f48771", fontSize: 12 }}>{j.error}</div>}
@@ -126,6 +136,10 @@ export function MigratePanel({ conns, source, collections, onClose }:
             <button disabled={!picked.size} onClick={startBatch}>
               Dump {picked.size || ""} collection{picked.size === 1 ? "" : "s"}
             </button>}
+          {jobs.some(j => j.state === "running") &&
+            <button className="ghost" onClick={() => jobs.filter(j => j.state === "running").forEach(j => api.pauseJob(j.id))}>Pause</button>}
+          {jobs.some(j => j.state === "paused" || j.state === "error") &&
+            <button className="ghost" onClick={() => jobs.filter(j => j.state === "paused" || j.state === "error").forEach(j => api.resumeJob(j.id))}>Resume</button>}
         </div>
       </div>
     </div>
