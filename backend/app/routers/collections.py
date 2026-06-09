@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 from .. import chroma_client
 from ..models import (
     CollectionCreate, CollectionInfo, CollectionRename,
-    FieldInfo, RecordsPage, RecordsQuery,
+    DeleteRecordsRequest, FieldInfo, RecordsPage, RecordsQuery,
 )
 
 router = APIRouter(prefix="/connections/{conn_id}/collections", tags=["collections"])
@@ -141,5 +141,40 @@ def query_records(conn_id: int, name: str, body: RecordsQuery):
     try:
         coll = chroma_client.client_for(conn_id).get_collection(name)
         return _build_page(coll, body.where, body.offset, body.limit)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/{name}/records/{record_id}")
+def get_record(conn_id: int, name: str, record_id: str):
+    """Fetch a single record with its full embedding."""
+    try:
+        coll = chroma_client.client_for(conn_id).get_collection(name)
+        result = coll.get(ids=[record_id], include=["documents", "embeddings", "metadatas"])
+        if not result["ids"]:
+            raise HTTPException(status_code=404, detail="record not found")
+        emb = result.get("embeddings")
+        full_emb = list(emb[0]) if emb is not None and len(emb) and emb[0] is not None else None
+        return {
+            "id": result["ids"][0],
+            "document": (result.get("documents") or [None])[0],
+            "metadata": (result.get("metadatas") or [None])[0],
+            "embedding": full_emb,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.delete("/{name}/records")
+def delete_records(conn_id: int, name: str, body: DeleteRecordsRequest):
+    """Delete specific records by ID from a collection."""
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="ids must not be empty")
+    try:
+        coll = chroma_client.client_for(conn_id).get_collection(name)
+        coll.delete(ids=body.ids)
+        return {"ok": True, "deleted": len(body.ids)}
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=str(e))

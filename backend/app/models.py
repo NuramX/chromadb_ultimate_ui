@@ -100,6 +100,10 @@ class JobStatus(BaseModel):
     error: Optional[str] = None
 
 
+class DeleteRecordsRequest(BaseModel):
+    ids: list[str]  # record IDs to delete from a collection
+
+
 class CompatReport(BaseModel):
     source_dimension: Optional[int]
     target_dimension: Optional[int]

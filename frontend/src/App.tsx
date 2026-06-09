@@ -189,6 +189,7 @@ export function App() {
   const [selAnchor, setSelAnchor] = useState<string | null>(null);
   const reqSeq = useRef(0);  // monotonic counter — stale responses are discarded
   const [page, setPage] = useState<RecordsPage | null>(null);
+  const [selRows, setSelRows] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
   const [migrateSource, setMigrateSource] = useState<Connection | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -328,6 +329,7 @@ export function App() {
     setSelConnId(connId); setSelNames(new Set([name])); setSelAnchor(name);
     setAppliedWhere(null);
     setFields([]);
+    setSelRows(new Set());  // clear record row selection when switching collection
     api.getFields(connId, name).then(setFields).catch(() => setFields([]));
     fetchPage(connId, name, 0, null);
   }
@@ -639,9 +641,18 @@ export function App() {
               <RecordTable
                 name={opened.name}
                 conn={conns.find(c => c.id === opened.connId)?.name ?? `#${opened.connId}`}
+                connId={opened.connId}
                 page={page}
                 filtered={!!appliedWhere}
+                selRows={selRows}
+                onSelRows={setSelRows}
                 onPage={(off) => fetchPage(opened.connId, opened.name, off, appliedWhere)}
+                onDelete={async (ids) => {
+                  await api.deleteRecords(opened.connId, opened.name, ids);
+                  setSelRows(prev => { const n = new Set(prev); ids.forEach(id => n.delete(id)); return n; });
+                  fetchPage(opened.connId, opened.name, page.offset, appliedWhere);
+                  reloadColls(opened.connId);
+                }}
               />
             )}
           </>
@@ -729,13 +740,59 @@ export function App() {
   );
 }
 
-function RecordTable({ name, conn, page, filtered, onPage }:
-  { name: string; conn: string; page: RecordsPage; filtered: boolean; onPage: (off: number) => void }) {
+// Stringify metadata with keys in a stable (alphabetical) order so every row
+// shows its fields in the same sequence, regardless of insertion order.
+function metaJson(meta: Record<string, unknown> | null, indent?: number): string {
+  if (!meta) return "";
+  const keys = Object.keys(meta).sort();
+  const ordered: Record<string, unknown> = {};
+  for (const k of keys) ordered[k] = meta[k];
+  return JSON.stringify(ordered, null, indent);
+}
+
+function RecordTable({ name, conn, connId, page, filtered, selRows, onSelRows, onPage, onDelete }:
+  { name: string; conn: string; connId: number; page: RecordsPage; filtered: boolean;
+    selRows: Set<string>; onSelRows: (s: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
+    onPage: (off: number) => void; onDelete: (ids: string[]) => Promise<void> }) {
   const { offset, limit, total } = page;
+  const [detail, setDetail] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const toggleRow = (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
+    e.stopPropagation();
+    onSelRows(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  };
+  const toggleAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // "select all" on this page merges into the global selection; uncheck clears only this page's IDs.
+    if (e.target.checked) {
+      onSelRows(prev => { const n = new Set(prev); page.ids.forEach(id => n.add(id)); return n; });
+    } else {
+      onSelRows(prev => { const n = new Set(prev); page.ids.forEach(id => n.delete(id)); return n; });
+    }
+  };
+
+  const handleDelete = async (ids: string[]) => {
+    const label = ids.length === 1 ? `record "${ids[0]}"` : `${ids.length} records`;
+    if (!window.confirm(`Delete ${label}?\nThis cannot be undone.`)) return;
+    setDeleting(true);
+    try { await onDelete(ids); setDetail(null); }
+    finally { setDeleting(false); }
+  };
+
+  // "all checked" = every ID on THIS page is selected (cross-page sel may have more).
+  const allChecked = page.ids.length > 0 && page.ids.every(id => selRows.has(id));
+  const someChecked = selRows.size > 0;
+
   return (
     <>
       <div className="row">
         <h3 style={{ flex: 1, margin: 0 }}>{name} <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>@ {conn}</span></h3>
+        {someChecked && (
+          <button className="ghost" style={{ color: "#f48771" }} disabled={deleting}
+                  onClick={() => handleDelete([...selRows])}>
+            Delete {selRows.size} record{selRows.size > 1 ? "s" : ""}
+          </button>
+        )}
         <span className="muted">{total === 0 ? 0 : offset + 1}–{Math.min(offset + limit, total)} / {total}{filtered ? " matched" : ""}</span>
         <button className="ghost" disabled={offset === 0}
                 onClick={() => onPage(Math.max(0, offset - limit))}>◀</button>
@@ -743,19 +800,111 @@ function RecordTable({ name, conn, page, filtered, onPage }:
                 onClick={() => onPage(offset + limit)}>▶</button>
       </div>
       <table>
-        <thead><tr><th>id</th><th>document</th><th>metadata</th><th>embedding</th></tr></thead>
+        <thead>
+          <tr>
+            <th style={{ width: 28 }}>
+              <input type="checkbox" style={{ width: "auto" }}
+                     checked={allChecked} onChange={toggleAll} />
+            </th>
+            <th>id</th><th>document</th><th>metadata</th><th>embedding</th>
+          </tr>
+        </thead>
         <tbody>
           {page.ids.map((id, i) => (
-            <tr key={id}>
+            <tr key={id} onClick={() => setDetail(i)} style={{ cursor: "pointer" }}
+                title="Click to view full record"
+                className={selRows.has(id) ? "highlighted" : ""}>
+              <td onClick={e => e.stopPropagation()}>
+                <input type="checkbox" style={{ width: "auto" }}
+                       checked={selRows.has(id)}
+                       onChange={e => toggleRow(e, id)} />
+              </td>
               <td>{id}</td>
               <td title={page.documents[i] ?? ""}>{page.documents[i]}</td>
-              <td>{page.metadatas[i] ? JSON.stringify(page.metadatas[i]) : ""}</td>
+              <td>{metaJson(page.metadatas[i])}</td>
               <td className="muted">{page.embeddings_preview[i]
                 ? `[${page.embeddings_preview[i]!.map(n => n.toFixed(3)).join(", ")}…]` : ""}</td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {detail !== null && (
+        <RecordDetail
+          id={page.ids[detail]}
+          document={page.documents[detail]}
+          metadata={page.metadatas[detail]}
+          embeddingPreview={page.embeddings_preview[detail]}
+          connId={connId}
+          collName={name}
+          onClose={() => setDetail(null)}
+          onDelete={() => handleDelete([page.ids[detail]])}
+        />
+      )}
     </>
+  );
+}
+
+function RecordDetail({ id, document, metadata, embeddingPreview, connId, collName, onClose, onDelete }:
+  { id: string; document: string | null; metadata: Record<string, unknown> | null;
+    embeddingPreview: number[] | null; connId: number; collName: string;
+    onClose: () => void; onDelete: () => void }) {
+  const [fullEmb, setFullEmb] = useState<number[] | null | "loading">("loading");
+  useEffect(() => {
+    api.getRecord(connId, collName, id)
+      .then(r => setFullEmb(r.embedding))
+      .catch(() => setFullEmb(embeddingPreview));  // fallback to preview on error
+  }, [id]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const overlay: React.CSSProperties = {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "grid", placeItems: "center",
+  };
+  const card: React.CSSProperties = {
+    background: "#252526", border: "1px solid #3c3c3c", borderRadius: 8,
+    padding: 20, width: 640, maxHeight: "85vh", overflow: "auto", display: "grid", gap: 12,
+  };
+  const box: React.CSSProperties = {
+    background: "#1e1e1e", border: "1px solid #3c3c3c", borderRadius: 4,
+    padding: 10, margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word",
+    maxHeight: 280, overflow: "auto",
+  };
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={card} onClick={e => e.stopPropagation()}>
+        <div className="row" style={{ margin: 0 }}>
+          <h3 style={{ flex: 1, margin: 0 }}>Record</h3>
+          <button className="ghost" style={{ color: "#f48771" }} onClick={onDelete}>Delete</button>
+          <button className="ghost" onClick={onClose}>Close</button>
+        </div>
+
+        <div>
+          <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>id</div>
+          <pre style={box}>{id}</pre>
+        </div>
+
+        <div>
+          <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>document</div>
+          <pre style={box}>{document ?? <span className="muted">(none)</span>}</pre>
+        </div>
+
+        <div>
+          <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>metadata</div>
+          <pre style={box}>{metadata ? metaJson(metadata, 2) : <span className="muted">(none)</span>}</pre>
+        </div>
+
+        <div>
+          <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>
+            embedding{fullEmb !== "loading" && fullEmb ? ` (${fullEmb.length} dims)` : ""}
+          </div>
+          <pre style={box}>
+            {fullEmb === "loading"
+              ? <span className="muted">loading…</span>
+              : fullEmb
+                ? `[${fullEmb.map(n => n.toFixed(6)).join(",\n ")}]`
+                : <span className="muted">(none)</span>}
+          </pre>
+        </div>
+      </div>
+    </div>
   );
 }

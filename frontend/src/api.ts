@@ -52,6 +52,9 @@ export const api = {
   queryRecords: (id: number, name: string, where: Where | null, offset = 0, limit = 50) =>
     req<RecordsPage>(`/connections/${id}/collections/${encodeURIComponent(name)}/records`,
       { method: "POST", body: JSON.stringify({ where, offset, limit }) }),
+  getRecord: (id: number, name: string, recordId: string) =>
+    req<{ id: string; document: string | null; metadata: Record<string, unknown> | null; embedding: number[] | null }>(
+      `/connections/${id}/collections/${encodeURIComponent(name)}/records/${encodeURIComponent(recordId)}`),
   getFields: (id: number, name: string) =>
     req<FieldInfo[]>(`/connections/${id}/collections/${encodeURIComponent(name)}/fields`),
   createCollection: (id: number, name: string, space = "cosine") =>
@@ -60,6 +63,10 @@ export const api = {
     req(`/connections/${id}/collections/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify({ new_name }) }),
   deleteCollection: (id: number, name: string) =>
     req(`/connections/${id}/collections/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  deleteRecords: (id: number, name: string, ids: string[]) =>
+    req<{ ok: boolean; deleted: number }>(
+      `/connections/${id}/collections/${encodeURIComponent(name)}/records`,
+      { method: "DELETE", body: JSON.stringify({ ids }) }),
 
   createJob: (b: object) => req<JobStatus>("/jobs", { method: "POST", body: JSON.stringify(b) }),
   createBatch: (b: object) => req<JobStatus[]>("/jobs/batch", { method: "POST", body: JSON.stringify(b) }),
