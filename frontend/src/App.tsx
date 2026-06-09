@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Connection, type CollectionInfo, type RecordsPage, type JobStatus } from "./api";
+import { api, type Connection, type CollectionInfo, type RecordsPage, type JobStatus, type FieldInfo, type Where } from "./api";
 import { ConnectionForm } from "./ConnectionForm";
 import { MigratePanel } from "./MigratePanel";
 import { JobsPanel } from "./JobsPanel";
+import { FilterBar } from "./FilterBar";
+import { FilteredDumpDialog } from "./FilteredDumpDialog";
 
 // DBeaver-style SVG Icon Components
 function ChevronIcon({ expanded }: { expanded: boolean }) {
@@ -178,6 +180,9 @@ export function App() {
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
 
   const [opened, setOpened] = useState<CollRef | null>(null);   // record view target
+  const [fields, setFields] = useState<FieldInfo[]>([]);        // metadata fields of opened
+  const [appliedWhere, setAppliedWhere] = useState<Where | null>(null);
+  const [filteredDump, setFilteredDump] = useState<{ connId: number; collection: string; where: Where } | null>(null);
   // Multi-select for bulk actions, scoped to a single connection at a time.
   const [selConnId, setSelConnId] = useState<number | null>(null);
   const [selNames, setSelNames] = useState<Set<string>>(new Set());
@@ -302,21 +307,35 @@ export function App() {
     setSelNames(new Set());
   }
 
-  // double click — load records. Stale responses are discarded via reqSeq.
-  async function openColl(connId: number, name: string, offset = 0) {
+  // Fetch one page of the opened collection with the current filter.
+  async function fetchPage(connId: number, name: string, offset: number, where: Where | null) {
     const seq = ++reqSeq.current;
-    setOpened({ connId, name });
-    setSelConnId(connId); setSelNames(new Set([name])); setSelAnchor(name);
     setErr(null);
     setPage(null);
     try {
-      const result = await api.getRecords(connId, name, offset, 50);
+      const result = await api.queryRecords(connId, name, where, offset, 50);
       if (seq !== reqSeq.current) return;  // newer request already in flight
       setPage(result);
     } catch (e: any) {
       if (seq !== reqSeq.current) return;
       setErr(e.message);
     }
+  }
+
+  // double click — open a collection fresh: clear filter, load fields + page 1.
+  async function openColl(connId: number, name: string) {
+    setOpened({ connId, name });
+    setSelConnId(connId); setSelNames(new Set([name])); setSelAnchor(name);
+    setAppliedWhere(null);
+    setFields([]);
+    api.getFields(connId, name).then(setFields).catch(() => setFields([]));
+    fetchPage(connId, name, 0, null);
+  }
+
+  function applyFilter(where: Where | null) {
+    if (!opened) return;
+    setAppliedWhere(where);
+    fetchPage(opened.connId, opened.name, 0, where);
   }
 
   const toggleConn = (id: number, e: React.MouseEvent) => {
@@ -608,13 +627,24 @@ export function App() {
           <p className="muted">Pick or add a connection.</p>}
         {!opened && connectedIds.size > 0 &&
           <p className="muted">Double-click a collection to browse its records.</p>}
-        {opened && page && (
-          <RecordTable
-            name={opened.name}
-            conn={conns.find(c => c.id === opened.connId)?.name ?? `#${opened.connId}`}
-            page={page}
-            onPage={(off) => openColl(opened.connId, opened.name, off)}
-          />
+        {opened && (
+          <>
+            <FilterBar
+              fields={fields}
+              active={!!appliedWhere}
+              onApply={applyFilter}
+              onDumpFiltered={(w) => setFilteredDump({ connId: opened.connId, collection: opened.name, where: w })}
+            />
+            {page && (
+              <RecordTable
+                name={opened.name}
+                conn={conns.find(c => c.id === opened.connId)?.name ?? `#${opened.connId}`}
+                page={page}
+                filtered={!!appliedWhere}
+                onPage={(off) => fetchPage(opened.connId, opened.name, off, appliedWhere)}
+              />
+            )}
+          </>
         )}
       </main>
 
@@ -626,6 +656,16 @@ export function App() {
       )}
       {showJobs && (
         <JobsPanel jobs={jobs} conns={conns} onClose={() => setShowJobs(false)} onChanged={refreshJobs} />
+      )}
+      {filteredDump && (
+        <FilteredDumpDialog
+          conns={conns}
+          sourceConnId={filteredDump.connId}
+          collection={filteredDump.collection}
+          where={filteredDump.where}
+          onClose={() => setFilteredDump(null)}
+          onStarted={() => { setFilteredDump(null); setShowJobs(true); refreshJobs(); }}
+        />
       )}
 
       {menu?.kind === "conn" && (
@@ -689,14 +729,14 @@ export function App() {
   );
 }
 
-function RecordTable({ name, conn, page, onPage }:
-  { name: string; conn: string; page: RecordsPage; onPage: (off: number) => void }) {
+function RecordTable({ name, conn, page, filtered, onPage }:
+  { name: string; conn: string; page: RecordsPage; filtered: boolean; onPage: (off: number) => void }) {
   const { offset, limit, total } = page;
   return (
     <>
       <div className="row">
         <h3 style={{ flex: 1, margin: 0 }}>{name} <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>@ {conn}</span></h3>
-        <span className="muted">{offset + 1}–{Math.min(offset + limit, total)} / {total}</span>
+        <span className="muted">{total === 0 ? 0 : offset + 1}–{Math.min(offset + limit, total)} / {total}{filtered ? " matched" : ""}</span>
         <button className="ghost" disabled={offset === 0}
                 onClick={() => onPage(Math.max(0, offset - limit))}>◀</button>
         <button className="ghost" disabled={offset + limit >= total}

@@ -46,6 +46,17 @@ class CollectionInfo(BaseModel):
     dimension: Optional[int] = None
 
 
+class FieldInfo(BaseModel):
+    name: str
+    type: str  # str | int | float | bool — inferred from sampled records
+
+
+class RecordsQuery(BaseModel):
+    where: Optional[dict[str, Any]] = None  # chromadb metadata filter
+    offset: int = 0
+    limit: int = 50
+
+
 class RecordsPage(BaseModel):
     ids: list[str]
     documents: list[Optional[str]]
@@ -63,6 +74,7 @@ class MigrateRequest(BaseModel):
     target_collection: Optional[str] = None  # default: same name
     batch_size: int = Field(default=config.DEFAULT_BATCH, ge=1, le=10000)
     create_if_missing: bool = True
+    where: Optional[dict[str, Any]] = None  # dump only records matching this filter
 
 
 class MigrateBatchRequest(BaseModel):

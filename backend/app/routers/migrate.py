@@ -1,6 +1,8 @@
 """Migration jobs: pre-flight compat check, start, status, resume, pause."""
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, HTTPException
 
 from ..db import connect
@@ -9,11 +11,12 @@ from ..services import migrator
 
 
 def _insert_job(c, source_conn: int, target_conn: int, source_coll: str,
-                target_coll: str, batch_size: int) -> int:
+                target_coll: str, batch_size: int, where=None) -> int:
     cur = c.execute(
         "INSERT INTO jobs (source_conn_id, target_conn_id, source_collection,"
-        " target_collection, batch_size) VALUES (?,?,?,?,?)",
-        (source_conn, target_conn, source_coll, target_coll, batch_size),
+        " target_collection, batch_size, where_json) VALUES (?,?,?,?,?,?)",
+        (source_conn, target_conn, source_coll, target_coll, batch_size,
+         json.dumps(where) if where else None),
     )
     return cur.lastrowid
 
@@ -57,7 +60,7 @@ def create_job(body: MigrateRequest):
     target = body.target_collection or body.source_collection
     with connect() as c:
         job_id = _insert_job(c, body.source_connection_id, body.target_connection_id,
-                             body.source_collection, target, body.batch_size)
+                             body.source_collection, target, body.batch_size, body.where)
     migrator.enqueue(job_id)
     return _status(_job(job_id))
 

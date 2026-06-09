@@ -18,6 +18,9 @@ export interface CollectionInfo {
   name: string; id: string; count: number;
   metadata: Record<string, unknown> | null; dimension: number | null;
 }
+export interface FieldInfo { name: string; type: "str" | "int" | "float" | "bool"; }
+export type Where = Record<string, unknown>;
+
 export interface RecordsPage {
   ids: string[]; documents: (string | null)[];
   metadatas: (Record<string, unknown> | null)[];
@@ -46,6 +49,11 @@ export const api = {
     req<CollectionInfo[]>(`/connections/${id}/collections`),
   getRecords: (id: number, name: string, offset = 0, limit = 50) =>
     req<RecordsPage>(`/connections/${id}/collections/${encodeURIComponent(name)}/records?offset=${offset}&limit=${limit}`),
+  queryRecords: (id: number, name: string, where: Where | null, offset = 0, limit = 50) =>
+    req<RecordsPage>(`/connections/${id}/collections/${encodeURIComponent(name)}/records`,
+      { method: "POST", body: JSON.stringify({ where, offset, limit }) }),
+  getFields: (id: number, name: string) =>
+    req<FieldInfo[]>(`/connections/${id}/collections/${encodeURIComponent(name)}/fields`),
   createCollection: (id: number, name: string, space = "cosine") =>
     req(`/connections/${id}/collections`, { method: "POST", body: JSON.stringify({ name, space }) }),
   renameCollection: (id: number, name: string, new_name: string) =>

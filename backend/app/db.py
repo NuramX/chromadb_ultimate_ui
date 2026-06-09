@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     total             INTEGER NOT NULL DEFAULT 0,
     processed         INTEGER NOT NULL DEFAULT 0,
     checkpoint_offset INTEGER NOT NULL DEFAULT 0,
+    where_json        TEXT,
     error             TEXT
 );
 """
@@ -39,6 +40,14 @@ def init() -> None:
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
     with connect() as c:
         c.executescript(_SCHEMA)
+        _migrate(c)
+
+
+def _migrate(c) -> None:
+    """Add columns introduced after the first release (idempotent)."""
+    cols = {r["name"] for r in c.execute("PRAGMA table_info(jobs)").fetchall()}
+    if "where_json" not in cols:
+        c.execute("ALTER TABLE jobs ADD COLUMN where_json TEXT")
 
 
 @contextmanager

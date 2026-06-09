@@ -22,5 +22,10 @@ install:
 backend:
 	cd backend && .venv/bin/uvicorn app.main:app --reload --port $(BACKEND_PORT)
 
+# No --reload: use this when running real long dumps so a code edit can't
+# restart the server and interrupt a job mid-flight.
+serve:
+	cd backend && .venv/bin/uvicorn app.main:app --port $(BACKEND_PORT)
+
 frontend:
 	cd frontend && npm run dev

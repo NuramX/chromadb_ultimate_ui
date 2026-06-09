@@ -8,6 +8,7 @@ Designed for >1M vectors:
 """
 from __future__ import annotations
 
+import json
 import queue
 import threading
 from typing import Optional
@@ -163,9 +164,18 @@ def _run(job_id: int, cancel: threading.Event) -> None:
             job["target_collection"], metadata=source.metadata or None
         )
 
-        total = source.count()
+        where = json.loads(job["where_json"]) if job["where_json"] else None
+
         offset = job["checkpoint_offset"]  # resume point
         batch = job["batch_size"]
+
+        if where:
+            # Filtered dump: resolve matching ids up front for total + paging.
+            match_ids = sorted(source.get(where=where, include=[])["ids"])
+            total = len(match_ids)
+        else:
+            match_ids = None
+            total = source.count()
         _set(job_id, state="running", total=total)
 
         while offset < total:
@@ -173,9 +183,11 @@ def _run(job_id: int, cancel: threading.Event) -> None:
                 _set(job_id, state="paused")
                 return
 
-            page = source.get(
-                limit=batch, offset=offset, include=_INCLUDE
-            )
+            if where:
+                slice_ids = match_ids[offset:offset + batch]
+                page = source.get(ids=slice_ids, include=_INCLUDE)
+            else:
+                page = source.get(limit=batch, offset=offset, include=_INCLUDE)
             ids = page["ids"]
             if not ids:
                 break
