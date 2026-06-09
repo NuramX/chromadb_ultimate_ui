@@ -200,15 +200,15 @@ def _pipeline_copy(job_id, source, target, all_ids, offset, batch,
     """Copy all_ids[offset:] from source to target with a 2-thread pipeline.
 
     Reader thread: fetch one CUI_BATCH slice from the source at a time and hand
-    it to a bounded queue (maxsize=2 → at most one batch prefetched, so the weak
-    source is never hit by more than one in-flight request).
+    it to a bounded queue (size CUI_PREFETCH_DEPTH → the reader runs at most that
+    many batches ahead, so the weak source is never flooded).
     Writer (this thread): drain the queue, accumulate WRITE_BATCH_FACTOR batches,
     and upsert them to the (strong) target in one call — fewer round-trips.
 
     Checkpoint advances only after a successful target write, so a crash/pause
     resumes from the last fully-written offset (upsert is idempotent anyway)."""
     total = len(all_ids)
-    q: "queue.Queue" = queue.Queue(maxsize=2)
+    q: "queue.Queue" = queue.Queue(maxsize=config.PREFETCH_DEPTH)
     stop = threading.Event()   # writer signals reader to bail on error
     errbox: dict[str, BaseException] = {}
 

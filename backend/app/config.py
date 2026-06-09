@@ -24,12 +24,21 @@ MAX_CONCURRENT_JOBS = int(os.environ.get("CUI_MAX_CONCURRENT_JOBS", "1"))
 
 # Read/write pipeline: a reader thread fetches the next batch from the source
 # while the writer flushes the previous one to the target — overlapping the two
-# network waits instead of doing them one after another.
+# network waits instead of doing them one after another. This overlap is the
+# main speedup and never increases load on either server.
+
 # WRITE_BATCH_FACTOR: how many source batches the writer accumulates before one
-# upsert to the target. The source is still read one CUI_BATCH at a time (the
-# weak side is unchanged); only the target (strong side) gets larger writes,
-# cutting its round-trips by this factor. Set to 1 to disable write batching.
-WRITE_BATCH_FACTOR = max(1, int(os.environ.get("CUI_WRITE_FACTOR", "4")))
+# upsert to the target. The source is always read one CUI_BATCH at a time (the
+# weak side is unchanged). With factor > 1 the target (strong side) gets larger
+# writes, cutting its round-trips. Default 1 — target writes the same CUI_BATCH
+# size as the source reads. Bump it (env CUI_WRITE_FACTOR or edit here) only if
+# the target can take bigger upserts.
+WRITE_BATCH_FACTOR = max(1, int(os.environ.get("CUI_WRITE_FACTOR", "1")))
+
+# PREFETCH_DEPTH: how many batches the reader may run ahead of the writer (the
+# bounded queue size). Keep this small — at depth N the source can have at most
+# N requests' worth of data buffered ahead, so 1–2 protects a weak source.
+PREFETCH_DEPTH = max(1, int(os.environ.get("CUI_PREFETCH_DEPTH", "2")))
 
 
 def _load_or_create_key() -> bytes:
