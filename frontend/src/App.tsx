@@ -844,6 +844,60 @@ function RecordTable({ name, conn, connId, page, filtered, selRows, onSelRows, o
   );
 }
 
+function CopyButton({ text, label }: { text: string | null; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (text === null) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.error("Failed to copy!", err);
+    }
+  };
+
+  return (
+    <button
+      className="ghost"
+      style={{
+        padding: "2px 6px",
+        fontSize: "10px",
+        height: "20px",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        borderColor: copied ? "#4caf50" : "#3c3c3c",
+        color: copied ? "#4caf50" : "#aaa",
+        transition: "all 0.15s ease",
+        background: "transparent",
+      }}
+      disabled={text === null}
+      onClick={handleCopy}
+      title={`Copy ${label}`}
+    >
+      {copied ? (
+        <>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <span>Copied!</span>
+        </>
+      ) : (
+        <>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+          <span>Copy</span>
+        </>
+      )}
+    </button>
+  );
+}
+
 function RecordDetail({ id, document, metadata, embeddingPreview, connId, collName, onClose, onDelete }:
   { id: string; document: string | null; metadata: Record<string, unknown> | null;
     embeddingPreview: number[] | null; connId: number; collName: string;
@@ -867,33 +921,60 @@ function RecordDetail({ id, document, metadata, embeddingPreview, connId, collNa
     padding: 10, margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word",
     maxHeight: 280, overflow: "auto",
   };
+
+  const getFullRecordJson = () => {
+    const emb = Array.isArray(fullEmb) ? fullEmb : (Array.isArray(embeddingPreview) ? embeddingPreview : null);
+    return JSON.stringify({
+      id,
+      document,
+      metadata,
+      embedding: emb
+    }, null, 2);
+  };
+
   return (
     <div style={overlay} onClick={onClose}>
       <div style={card} onClick={e => e.stopPropagation()}>
         <div className="row" style={{ margin: 0 }}>
           <h3 style={{ flex: 1, margin: 0 }}>Record</h3>
+          <CopyButton text={getFullRecordJson()} label="Record JSON" />
           <button className="ghost" style={{ color: "#f48771" }} onClick={onDelete}>Delete</button>
           <button className="ghost" onClick={onClose}>Close</button>
         </div>
 
         <div>
-          <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>id</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <span className="muted" style={{ fontSize: 11 }}>id</span>
+            <CopyButton text={id} label="ID" />
+          </div>
           <pre style={box}>{id}</pre>
         </div>
 
         <div>
-          <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>document</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <span className="muted" style={{ fontSize: 11 }}>document</span>
+            <CopyButton text={document} label="document" />
+          </div>
           <pre style={box}>{document ?? <span className="muted">(none)</span>}</pre>
         </div>
 
         <div>
-          <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>metadata</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <span className="muted" style={{ fontSize: 11 }}>metadata</span>
+            <CopyButton text={metadata ? metaJson(metadata, 2) : null} label="metadata" />
+          </div>
           <pre style={box}>{metadata ? metaJson(metadata, 2) : <span className="muted">(none)</span>}</pre>
         </div>
 
         <div>
-          <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>
-            embedding{fullEmb !== "loading" && fullEmb ? ` (${fullEmb.length} dims)` : ""}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <span className="muted" style={{ fontSize: 11 }}>
+              embedding{fullEmb !== "loading" && fullEmb ? ` (${fullEmb.length} dims)` : ""}
+            </span>
+            <CopyButton 
+              text={Array.isArray(fullEmb) ? JSON.stringify(fullEmb) : null} 
+              label="embedding" 
+            />
           </div>
           <pre style={box}>
             {fullEmb === "loading"
